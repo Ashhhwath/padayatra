@@ -219,10 +219,10 @@ const glCv = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({canvas:glCv, antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xa8dbea);
-scene.fog = new THREE.Fog(0xa8dbea, 90, 240);
+scene.background = new THREE.Color(0xbfe6f2);
+scene.fog = new THREE.Fog(0xe8f6f9, 130, 420);
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 600); // near=0.5: depth precision for thin road layers
 function onResize(){
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth/window.innerHeight;
@@ -235,87 +235,246 @@ scene.add(new THREE.HemisphereLight(0xeef7ff, 0x6a8f5a, 0.95));
 const sun = new THREE.DirectionalLight(0xfff2d8, 0.8);
 sun.position.set(40,80,20); scene.add(sun);
 
-/* ---------------- terrain: chunked planes with canvas textures ---------------- */
-const TILE = 2;                // metres per tile
-const CHUNK_T = 24;            // tiles per chunk side
-const CHUNK = TILE*CHUNK_T;    // 48 m
-const TILE_COLOR = {water:'#4fa9d8', sand:'#e8d9a8', path:'#e3d6bd', grass:'#8fd07a', deep:'#6cb85e'};
-function tileAt(tx,ty){
-  const n = fbm(tx*0.05, ty*0.05);
-  if(n<0.34) return 'water';
-  if(n<0.40) return 'sand';
-  if((((tx%28)+28)%28===0 || ((ty%28)+28)%28===0) && n>0.42) return 'path';
-  if(n>0.72) return 'deep';
-  return 'grass';
+/* ============ world: real streets from OpenStreetMap, GO art style ============ */
+const WORLD_COL = {
+  base:0x8fd06b, patchA:0x97d873, patchB:0x86cb61, patchC:0xa0dd7b,
+  green:0xa5e07f, forest:0x79c35c, building:0xa9e287,
+  water:0x6fcde3, roadCase:0xf0e96a, road:0x44687e,
+};
+// default anchor (Bengaluru) until the first GPS fix re-anchors the world
+let worldAnchor={lat:12.9752,lng:77.6068};
+let anchorGen=0;
+function llToLocal(lat,lng){
+  const x=(lng-worldAnchor.lng)*Math.cos(worldAnchor.lat*Math.PI/180)*111320;
+  const z=-(lat-worldAnchor.lat)*110540;
+  return {x:x+24, z:z+24};
+}
+function localToLatLng(x,z){
+  return {lat: worldAnchor.lat-(z-24)/110540,
+          lng: worldAnchor.lng+(x-24)/(Math.cos(worldAnchor.lat*Math.PI/180)*111320)};
+}
+
+/* sky dome + horizon gradient */
+const sky=new THREE.Mesh(
+  new THREE.SphereGeometry(480,24,12),
+  new THREE.ShaderMaterial({side:THREE.BackSide, depthWrite:false, fog:false,
+    uniforms:{top:{value:new THREE.Color(0x3fa9e8)}, bot:{value:new THREE.Color(0xe8f6f9)}},
+    vertexShader:'varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+    fragmentShader:'varying vec3 vP;uniform vec3 top;uniform vec3 bot;void main(){float t=smoothstep(0.0,0.38,normalize(vP).y);gl_FragColor=vec4(mix(bot,top,t),1.0);}'})
+);
+sky.renderOrder=-10; scene.add(sky);
+
+/* clouds: soft billboard sprites on a far ring */
+const cloudTex=(()=>{
+  const c=document.createElement('canvas'); c.width=256; c.height=128;
+  const g=c.getContext('2d');
+  const puff=(x,y,r)=>{const gr=g.createRadialGradient(x,y,r*0.2,x,y,r);
+    gr.addColorStop(0,'rgba(255,255,255,0.95)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.beginPath();g.arc(x,y,r,0,TAU);g.fill();};
+  puff(80,80,44);puff(128,66,52);puff(176,82,42);puff(120,92,40);
+  return new THREE.CanvasTexture(c);
+})();
+const clouds=new THREE.Group();
+for(let i=0;i<9;i++){
+  const m=new THREE.Sprite(new THREE.SpriteMaterial({map:cloudTex,transparent:true,opacity:0.9,fog:false,depthWrite:false}));
+  const a=i/9*TAU+hash2(i,3)*0.6, r=310+hash2(i,7)*130;
+  m.position.set(Math.sin(a)*r, 62+hash2(i,11)*55, Math.cos(a)*r);
+  const s=55+hash2(i,5)*70; m.scale.set(s,s*0.45,1);
+  clouds.add(m);
+}
+scene.add(clouds);
+
+/* ground: flat base with soft GO-style patchwork, world-anchored texture */
+const groundTex=(()=>{
+  const c=document.createElement('canvas'); c.width=c.height=256;
+  const g=c.getContext('2d');
+  g.fillStyle='#8fd06b'; g.fillRect(0,0,256,256);
+  const cols=['#97d873','#86cb61','#a0dd7b','#8bd166'];
+  for(let i=0;i<42;i++){
+    g.fillStyle=cols[i%4]; g.globalAlpha=0.55;
+    const w=18+hash2(i,1)*52, h=18+hash2(i,2)*52;
+    g.fillRect(hash2(i,3)*256-w/2, hash2(i,4)*256-h/2, w, h);
+  }
+  g.globalAlpha=1;
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(12,12);
+  return t;
+})();
+const GROUND_PERIOD=512; // metres per texture tile — plane snaps to this so the pattern never slides
+const ground=new THREE.Mesh(
+  new THREE.PlaneGeometry(GROUND_PERIOD*12,GROUND_PERIOD*12),
+  new THREE.MeshBasicMaterial({map:groundTex})
+);
+ground.rotation.x=-Math.PI/2; scene.add(ground);
+
+/* OSM tile fetch + build */
+const OSM_TILE=700;      // metres per fetch cell
+const osmTiles=new Map();
+const waterSpots=[];
+const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
+let overpassIdx=0;
+const ROAD_W={motorway:[15,11],trunk:[15,11],primary:[12,8.5],secondary:[10,7],
+  tertiary:[8.5,6],residential:[7,4.8],unclassified:[7,4.8],living_street:[7,4.8],
+  service:[5,3.2],pedestrian:[6,4],footway:[3.6,2.2],path:[3.6,2.2],cycleway:[3.6,2.2],steps:[3.6,2.2],track:[4.5,3]};
+const LAYER_H={green:0.02,water:0.035,building:0.05,roadCase:0.065,road:0.08};
+
+function ribbon(pts,w,h,out){
+  const hw=w/2;
+  for(let i=0;i<pts.length-1;i++){
+    const a=pts[i], b=pts[i+1];
+    let dx=b.x-a.x, dz=b.z-a.z; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
+    const nx=-dz*hw, nz=dx*hw;
+    out.push(a.x+nx,h,a.z+nz, b.x+nx,h,b.z+nz, b.x-nx,h,b.z-nz,
+             a.x+nx,h,a.z+nz, b.x-nx,h,b.z-nz, a.x-nx,h,a.z-nz);
+  }
+  // round joints where the line bends (and endpoints), so corners aren't gappy
+  for(let i=0;i<pts.length;i++){
+    if(i>0&&i<pts.length-1){
+      const p0=pts[i-1],p1=pts[i],p2=pts[i+1];
+      const a1=Math.atan2(p1.x-p0.x,p1.z-p0.z), a2=Math.atan2(p2.x-p1.x,p2.z-p1.z);
+      let da=Math.abs(a1-a2); if(da>Math.PI)da=TAU-da;
+      if(da<0.15) continue;
+    }
+    const p=pts[i], S=8;
+    for(let k=0;k<S;k++){
+      const b1=k/S*TAU, b2=(k+1)/S*TAU;
+      out.push(p.x,h,p.z, p.x+Math.cos(b1)*hw,h,p.z+Math.sin(b1)*hw, p.x+Math.cos(b2)*hw,h,p.z+Math.sin(b2)*hw);
+    }
+  }
+}
+function polyTris(pts,h,out){
+  if(pts.length<3)return;
+  const shape=new THREE.Shape();
+  shape.moveTo(pts[0].x,pts[0].z);
+  for(let i=1;i<pts.length;i++)shape.lineTo(pts[i].x,pts[i].z);
+  const geo=new THREE.ShapeGeometry(shape);
+  const pos=geo.attributes.position.array, idx=geo.index.array;
+  for(let i=0;i<idx.length;i++){
+    const j=idx[i]*3;
+    out.push(pos[j],h,pos[j+1]); // ShapeGeometry xy → world xz
+  }
+  geo.dispose();
+}
+function meshFromTris(arr,color){
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(arr),3));
+  return new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide}));
+}
+
+function buildOsmTile(json,key){
+  const tris={green:[],water:[],building:[],roadCase:[],road:[]};
+  const spots=[];
+  let buildings=0;
+  for(const el of (json.elements||[])){
+    if(el.type!=='way'||!el.geometry||!el.tags)continue;
+    const pts=el.geometry.map(g=>llToLocal(g.lat,g.lon));
+    const t=el.tags;
+    if(t.highway){
+      const closed=el.geometry.length>3 &&
+        el.geometry[0].lat===el.geometry[el.geometry.length-1].lat &&
+        el.geometry[0].lon===el.geometry[el.geometry.length-1].lon;
+      if(closed && (t.area==='yes'||t.highway==='pedestrian')){
+        polyTris(pts,LAYER_H.road,tris.road); // plazas etc. — fill, don't outline
+      } else {
+        const w=ROAD_W[t.highway]||ROAD_W.residential;
+        ribbon(pts,w[0],LAYER_H.roadCase,tris.roadCase);
+        ribbon(pts,w[1],LAYER_H.road,tris.road);
+      }
+    } else if(t.natural==='water'||/^(riverbank|dock|canal)$/.test(t.waterway||'')){
+      polyTris(pts,LAYER_H.water,tris.water);
+      let cx=0,cz=0; pts.forEach(p=>{cx+=p.x;cz+=p.z;}); cx/=pts.length; cz/=pts.length;
+      const r=Math.max(...pts.map(p=>Math.hypot(p.x-cx,p.z-cz)));
+      spots.push({x:cx,z:cz,r});
+    } else if(t.building){
+      if(++buildings<=1500) polyTris(pts,LAYER_H.building,tris.building);
+    } else if(t.landuse||t.leisure){
+      const dark=/forest|orchard|nature_reserve/.test((t.landuse||'')+(t.leisure||''));
+      polyTris(pts,LAYER_H.green,tris.green);
+      if(dark){/* forests drawn same layer, darker via second mesh below */}
+    }
+  }
+  const grp=new THREE.Group();
+  if(tris.green.length)grp.add(meshFromTris(tris.green,WORLD_COL.green));
+  if(tris.water.length)grp.add(meshFromTris(tris.water,WORLD_COL.water));
+  if(tris.building.length)grp.add(meshFromTris(tris.building,WORLD_COL.building));
+  if(tris.roadCase.length)grp.add(meshFromTris(tris.roadCase,WORLD_COL.roadCase));
+  if(tris.road.length)grp.add(meshFromTris(tris.road,WORLD_COL.road));
+  scene.add(grp);
+  waterSpots.push(...spots.map(s=>({...s,tile:key})));
+  return {grp};
+}
+function disposeTile(key,t){
+  scene.remove(t.grp);
+  t.grp.traverse(o=>{if(o.geometry)o.geometry.dispose(); if(o.material)o.material.dispose();});
+  for(let i=waterSpots.length-1;i>=0;i--)if(waterSpots[i].tile===key)waterSpots.splice(i,1);
+  osmTiles.delete(key);
 }
 function isWaterNear(x,z){
-  const tx=Math.floor(x/TILE), ty=Math.floor(z/TILE);
-  for(let dx=-4;dx<=4;dx+=2)for(let dy=-4;dy<=4;dy+=2)
-    if(tileAt(tx+dx,ty+dy)==='water') return true;
-  return false;
+  return waterSpots.some(s=>Math.hypot(s.x-x,s.z-z)<s.r+50);
 }
-
-const chunks = new Map();
-const treeGeoTop = new THREE.ConeGeometry(1.2, 2.6, 7);
-const treeGeoTrunk = new THREE.CylinderGeometry(0.22,0.28,1.1,6);
-const treeMatTop = new THREE.MeshLambertMaterial({color:0x4f9a45});
-const treeMatTop2 = new THREE.MeshLambertMaterial({color:0x5fae52});
-const treeMatTrunk = new THREE.MeshLambertMaterial({color:0x7a5a3a});
-
-function buildChunk(cx,cz){
+/* Overpass allows ~2 concurrent requests — queue tiles, nearest first, retry with backoff */
+const tileQueue=[]; let tileActive=0;
+function loadTile(cx,cz){
   const key=cx+','+cz;
-  if(chunks.has(key)) return;
-  const cnv=document.createElement('canvas'); cnv.width=cnv.height=CHUNK_T*14;
-  const g=cnv.getContext('2d');
-  const px=14;
-  for(let ty=0;ty<CHUNK_T;ty++)for(let tx=0;tx<CHUNK_T;tx++){
-    const wtx=cx*CHUNK_T+tx, wty=cz*CHUNK_T+ty;
-    const t=tileAt(wtx,wty);
-    g.fillStyle=TILE_COLOR[t];
-    g.fillRect(tx*px,ty*px,px+1,px+1);
-    const h=hash2(wtx,wty);
-    if(t==='grass' && h>0.75){ g.fillStyle='#7bc06a'; g.fillRect(tx*px+4,ty*px+5,3,5); g.fillRect(tx*px+8,ty*px+3,3,6); }
-    if(t==='water' && h>0.6){ g.fillStyle='rgba(255,255,255,.3)'; g.fillRect(tx*px+3,ty*px+6,7,1.6); }
-    if(t==='sand' && h>0.7){ g.fillStyle='rgba(0,0,0,.06)'; g.fillRect(tx*px+5,ty*px+5,2,2); }
+  if(osmTiles.has(key))return;
+  osmTiles.set(key,'queued');
+  tileQueue.push({cx,cz,key,tries:0,gen:anchorGen});
+  pumpTiles();
+}
+function pumpTiles(){
+  while(tileActive<2&&tileQueue.length){
+    const px=avatar.position.x/OSM_TILE-0.5, pz=avatar.position.z/OSM_TILE-0.5;
+    tileQueue.sort((a,b)=>Math.hypot(a.cx-px,a.cz-pz)-Math.hypot(b.cx-px,b.cz-pz));
+    fetchTile(tileQueue.shift());
   }
-  const tex=new THREE.CanvasTexture(cnv);
-  tex.magFilter=THREE.NearestFilter;
-  const mesh=new THREE.Mesh(
-    new THREE.PlaneGeometry(CHUNK,CHUNK),
-    new THREE.MeshLambertMaterial({map:tex})
-  );
-  mesh.rotation.x=-Math.PI/2;
-  mesh.position.set(cx*CHUNK+CHUNK/2, 0, cz*CHUNK+CHUNK/2);
-  const grp=new THREE.Group(); grp.add(mesh);
-  // trees on forest tiles
-  for(let ty=0;ty<CHUNK_T;ty++)for(let tx=0;tx<CHUNK_T;tx++){
-    const wtx=cx*CHUNK_T+tx, wty=cz*CHUNK_T+ty;
-    if(tileAt(wtx,wty)==='deep' && hash2(wtx*3.1,wty*1.7)>0.62){
-      const tr=new THREE.Group();
-      const trunk=new THREE.Mesh(treeGeoTrunk, treeMatTrunk); trunk.position.y=0.55;
-      const top=new THREE.Mesh(treeGeoTop, hash2(wtx,wty*2)>0.5?treeMatTop:treeMatTop2);
-      top.position.y=2.2;
-      tr.add(trunk); tr.add(top);
-      const s=0.8+hash2(wtx*5,wty*5)*0.7; tr.scale.setScalar(s);
-      tr.position.set(wtx*TILE+TILE/2, 0, wty*TILE+TILE/2);
-      grp.add(tr);
+}
+async function fetchTile(job){
+  const {cx,cz,key}=job;
+  if(job.gen!==anchorGen||osmTiles.get(key)!=='queued'){pumpTiles();return;}
+  tileActive++;
+  osmTiles.set(key,'loading');
+  const a=localToLatLng(cx*OSM_TILE,(cz+1)*OSM_TILE), b=localToLatLng((cx+1)*OSM_TILE,cz*OSM_TILE);
+  const bbox=`${Math.min(a.lat,b.lat)},${Math.min(a.lng,b.lng)},${Math.max(a.lat,b.lat)},${Math.max(a.lng,b.lng)}`;
+  const q=`[out:json][timeout:25][bbox:${bbox}];(way["highway"];way["natural"="water"];way["waterway"~"^(riverbank|dock|canal)$"];way["landuse"~"^(grass|forest|meadow|recreation_ground|village_green|orchard|farmland|cemetery)$"];way["leisure"~"^(park|garden|pitch|playground|golf_course|nature_reserve)$"];way["building"];);out geom qt;`;
+  try{
+    const r=await fetch(OVERPASS[overpassIdx%OVERPASS.length],{method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'data='+encodeURIComponent(q)});
+    if(!r.ok)throw new Error('overpass '+r.status);
+    const json=await r.json();
+    if(job.gen===anchorGen&&osmTiles.get(key)==='loading') osmTiles.set(key,buildOsmTile(json,key));
+  }catch(err){
+    overpassIdx++; // rotate to the mirror
+    if(osmTiles.get(key)==='loading'){
+      if(++job.tries<6){
+        osmTiles.set(key,'queued');
+        setTimeout(()=>{ if(osmTiles.get(key)==='queued'){tileQueue.push(job);pumpTiles();} }, 1500*job.tries);
+      } else osmTiles.delete(key);
     }
+  }finally{
+    tileActive--; pumpTiles();
   }
-  scene.add(grp);
-  chunks.set(key, grp);
+}
+function setWorldAnchor(lat,lng){
+  if(Math.hypot(lat-worldAnchor.lat,lng-worldAnchor.lng)<1e-6)return;
+  worldAnchor={lat,lng}; anchorGen++;
+  for(const [key,t] of [...osmTiles]){
+    if(t&&t.grp)disposeTile(key,t); else osmTiles.delete(key);
+  }
+  waterSpots.length=0;
 }
 function updateChunks(){
-  const ccx=Math.floor(avatar.position.x/CHUNK), ccz=Math.floor(avatar.position.z/CHUNK);
-  const R=3;
-  for(let dx=-R;dx<=R;dx++)for(let dz=-R;dz<=R;dz++) buildChunk(ccx+dx, ccz+dz);
-  for(const [key,grp] of chunks){
+  const p=avatar.position;
+  sky.position.set(p.x,0,p.z);
+  clouds.position.set(p.x,0,p.z);
+  clouds.rotation.y=performance.now()*0.000012;
+  ground.position.set(Math.round(p.x/GROUND_PERIOD)*GROUND_PERIOD,0,Math.round(p.z/GROUND_PERIOD)*GROUND_PERIOD);
+  const tx=Math.floor(p.x/OSM_TILE), tz=Math.floor(p.z/OSM_TILE);
+  for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)loadTile(tx+dx,tz+dz);
+  for(const [key,t] of osmTiles){
+    if(!t||!t.grp)continue;
     const [cx,cz]=key.split(',').map(Number);
-    if(Math.abs(cx-ccx)>R+1 || Math.abs(cz-ccz)>R+1){
-      scene.remove(grp);
-      grp.traverse(o=>{ if(o.material&&o.material.map) o.material.map.dispose();
-        if(o.geometry&&o.geometry!==treeGeoTop&&o.geometry!==treeGeoTrunk) o.geometry.dispose(); });
-      chunks.delete(key);
-    }
+    if(Math.abs(cx-tx)>2||Math.abs(cz-tz)>2)disposeTile(key,t);
   }
 }
 
@@ -353,7 +512,7 @@ const shadowTex=(()=>{const c=document.createElement('canvas');c.width=c.height=
 function makeShadow(sz){
   const m=new THREE.Mesh(new THREE.PlaneGeometry(sz,sz),
     new THREE.MeshBasicMaterial({map:shadowTex,transparent:true,depthWrite:false}));
-  m.rotation.x=-Math.PI/2; m.position.y=0.02; return m;
+  m.rotation.x=-Math.PI/2; m.position.y=0.1; return m; // above road layers (0.08)
 }
 avatar.add(makeShadow(1.6));
 
@@ -362,13 +521,13 @@ const ringMesh=new THREE.Mesh(
   new THREE.RingGeometry(INTERACT_RANGE-0.6, INTERACT_RANGE, 72),
   new THREE.MeshBasicMaterial({color:0xfdf8ee, transparent:true, opacity:0.3, side:THREE.DoubleSide})
 );
-ringMesh.rotation.x=-Math.PI/2; ringMesh.position.y=0.05;
+ringMesh.rotation.x=-Math.PI/2; ringMesh.position.y=0.1;
 scene.add(ringMesh);
 
 /* ---------------- camera rig (TPP: drag orbit + zoom) ---------------- */
-const cam = {yaw:0, dist:15, pitch:0.62, autoFollow:true, lastManual:0};
+const cam = {yaw:0, dist:18, pitch:0.72, autoFollow:true, lastManual:0};
 function applyCamera(dt){
-  const targetY=1.4;
+  const targetY=4.2; // look above the avatar → avatar sits low on screen, horizon + sky visible (GO framing)
   const off=new THREE.Vector3(
     Math.sin(cam.yaw)*Math.cos(cam.pitch),
     Math.sin(cam.pitch),
@@ -437,6 +596,7 @@ function onGpsFix(fix){
   gpsStats.fixes++; gpsStats.lastAcc=accuracy; gpsStats.lastAt=performance.now();
   if(!move.origin){
     move.origin={lat,lng};
+    setWorldAnchor(lat,lng); // rebuild the street map around the player's real location
     keepAwake();
     toast(`GPS locked (±${Math.round(accuracy)}m). Walk in the real world to move!`, 3200);
   }
@@ -675,7 +835,7 @@ function trySpawn(now){
   // tap ring (visible when in range)
   const tr=new THREE.Mesh(new THREE.RingGeometry(1.4,1.7,40),
     new THREE.MeshBasicMaterial({color:0xff6b5e,transparent:true,opacity:0.85,side:THREE.DoubleSide}));
-  tr.rotation.x=-Math.PI/2; tr.position.y=0.06; tr.visible=false;
+  tr.rotation.x=-Math.PI/2; tr.position.y=0.1; tr.visible=false;
   grp.add(tr);
   grp.position.set(x,0,z);
   scene.add(grp);
