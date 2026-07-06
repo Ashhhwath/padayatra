@@ -77,6 +77,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="GLTFLoader.js"></script>
 <script>
 "use strict";
 /* ============================================================
@@ -220,7 +221,7 @@ const renderer = new THREE.WebGLRenderer({canvas:glCv, antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfe6f2);
-scene.fog = new THREE.Fog(0xe8f6f9, 130, 420);
+scene.fog = new THREE.Fog(0xe0f2ec, 130, 420); // greenish haze so the map melts into the horizon like GO
 
 const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 600); // near=0.5: depth precision for thin road layers
 function onResize(){
@@ -237,9 +238,8 @@ sun.position.set(40,80,20); scene.add(sun);
 
 /* ============ world: real streets from OpenStreetMap, GO art style ============ */
 const WORLD_COL = {
-  base:0x8fd06b, patchA:0x97d873, patchB:0x86cb61, patchC:0xa0dd7b,
-  green:0xa5e07f, forest:0x79c35c, building:0xa9e287,
-  water:0x6fcde3, roadCase:0xf0e96a, road:0x44687e,
+  green:0xa8e88f, forest:0x7cc96e, building:0x9fe093,
+  water:0x66c9de, roadCase:0xf2ef6d, road:0x3e6b80,
 };
 // default anchor (Bengaluru) until the first GPS fix re-anchors the world
 let worldAnchor={lat:12.9752,lng:77.6068};
@@ -288,12 +288,17 @@ scene.add(clouds);
 const groundTex=(()=>{
   const c=document.createElement('canvas'); c.width=c.height=256;
   const g=c.getContext('2d');
-  g.fillStyle='#8fd06b'; g.fillRect(0,0,256,256);
-  const cols=['#97d873','#86cb61','#a0dd7b','#8bd166'];
-  for(let i=0;i<42;i++){
-    g.fillStyle=cols[i%4]; g.globalAlpha=0.55;
-    const w=18+hash2(i,1)*52, h=18+hash2(i,2)*52;
-    g.fillRect(hash2(i,3)*256-w/2, hash2(i,4)*256-h/2, w, h);
+  g.fillStyle='#8bd57e'; g.fillRect(0,0,256,256);
+  const cols=['#95dd86','#7fce8e','#9ce28c','#86d59b','#90da7f'];
+  for(let i=0;i<40;i++){ // soft rounded parcels, not hard squares
+    g.fillStyle=cols[i%5]; g.globalAlpha=0.5;
+    const x=hash2(i,3)*256, y=hash2(i,4)*256;
+    const rx=14+hash2(i,1)*34, ry=14+hash2(i,2)*34;
+    g.beginPath(); g.ellipse(x,y,rx,ry,hash2(i,6)*Math.PI,0,TAU); g.fill();
+    // wrap the pattern at the edges so tiling has no seams
+    g.beginPath(); g.ellipse(x-256,y,rx,ry,hash2(i,6)*Math.PI,0,TAU); g.fill();
+    g.beginPath(); g.ellipse(x,y-256,rx,ry,hash2(i,6)*Math.PI,0,TAU); g.fill();
+    g.beginPath(); g.ellipse(x-256,y-256,rx,ry,hash2(i,6)*Math.PI,0,TAU); g.fill();
   }
   g.globalAlpha=1;
   const t=new THREE.CanvasTexture(c);
@@ -478,9 +483,10 @@ function updateChunks(){
   }
 }
 
-/* ---------------- avatar (low-poly trainer) ---------------- */
+/* ---------------- avatar: rigged character (KayKit Rogue, CC0) ---------------- */
 const avatar = new THREE.Group();
-{
+let animMixer=null, animActions={}, animCurrent=null;
+function buildFallbackAvatar(){ // primitives, only if the model fails to load
   const ink=0x12303a;
   const body=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.42,0.95,10),
     new THREE.MeshLambertMaterial({color:0x2fb6a3}));
@@ -488,20 +494,34 @@ const avatar = new THREE.Group();
   const head=new THREE.Mesh(new THREE.SphereGeometry(0.32,12,10),
     new THREE.MeshLambertMaterial({color:0xffd9b8}));
   head.position.y=1.62; avatar.add(head);
-  const cap=new THREE.Mesh(new THREE.SphereGeometry(0.34,12,8,0,TAU,0,Math.PI/2),
-    new THREE.MeshLambertMaterial({color:0xff6b5e}));
-  cap.position.y=1.68; avatar.add(cap);
-  const brim=new THREE.Mesh(new THREE.BoxGeometry(0.34,0.06,0.3),
-    new THREE.MeshLambertMaterial({color:0xff6b5e}));
-  brim.position.set(0,1.7,0.38); avatar.add(brim);
   const legL=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,0.5,8),
     new THREE.MeshLambertMaterial({color:ink}));
   legL.position.set(-0.16,0.25,0); avatar.add(legL);
   const legR=legL.clone(); legR.position.x=0.16; avatar.add(legR);
-  const pack=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.5,0.22),
-    new THREE.MeshLambertMaterial({color:0xf5b93c}));
-  pack.position.set(0,1.05,-0.34); avatar.add(pack);
   avatar.userData={legL,legR};
+}
+new THREE.GLTFLoader().load('rogue.glb', g=>{
+  const model=g.scene;
+  model.traverse(o=>{
+    if(/^(1H_Crossbow|2H_Crossbow|Knife|Knife_Offhand|Throwable)$/.test(o.name)) o.visible=false;
+  });
+  const box=new THREE.Box3().setFromObject(model);
+  const s=1.8/(box.max.y-box.min.y);           // normalize to 1.8 m tall
+  model.scale.setScalar(s);
+  model.position.y=-box.min.y*s;
+  avatar.add(model);
+  animMixer=new THREE.AnimationMixer(model);
+  const clip=n=>THREE.AnimationClip.findByName(g.animations,n);
+  animActions={idle:animMixer.clipAction(clip('Idle')),
+               walk:animMixer.clipAction(clip('Walking_A')),
+               run: animMixer.clipAction(clip('Running_A'))};
+  animActions.idle.play(); animCurrent='idle';
+}, undefined, ()=>buildFallbackAvatar());
+function setAnim(n){
+  if(!animMixer||animCurrent===n||!animActions[n])return;
+  animActions[n].reset().fadeIn(0.15).play();
+  if(animActions[animCurrent])animActions[animCurrent].fadeOut(0.15);
+  animCurrent=n;
 }
 scene.add(avatar);
 // blob shadow
@@ -740,15 +760,18 @@ function updateMovement(dt,now){
     if(d>120){ avatar.position.x=move.target.x; avatar.position.z=move.target.z; }
   }
 
-  // face heading + walk cycle
+  // face heading + locomotion animation
   if(moving){
     let a=moveHeading-avatar.rotation.y;
     while(a>Math.PI)a-=TAU; while(a<-Math.PI)a+=TAU;
     avatar.rotation.y+=a*Math.min(1,16*dt);
-    walkPhase+=dt*9;
-    avatar.userData.legL.rotation.x=Math.sin(walkPhase)*0.7;
-    avatar.userData.legR.rotation.x=-Math.sin(walkPhase)*0.7;
-    avatar.position.y=Math.abs(Math.sin(walkPhase))*0.05;
+    if(animMixer){ setAnim(stickActive?'run':'walk'); }
+    else if(avatar.userData.legL){
+      walkPhase+=dt*9;
+      avatar.userData.legL.rotation.x=Math.sin(walkPhase)*0.7;
+      avatar.userData.legR.rotation.x=-Math.sin(walkPhase)*0.7;
+      avatar.position.y=Math.abs(Math.sin(walkPhase))*0.05;
+    }
     // auto-rotate camera behind walking direction (GPS walks only —
     // rotating mid-steer would warp the stick's frame of reference)
     if(cam.autoFollow && !stickActive && now-cam.lastManual>4000){
@@ -757,10 +780,14 @@ function updateMovement(dt,now){
       cam.yaw+=ca*Math.min(1,1.6*dt);
     }
   } else {
-    avatar.userData.legL.rotation.x*=0.85;
-    avatar.userData.legR.rotation.x*=0.85;
-    avatar.position.y*=0.85;
+    if(animMixer){ setAnim('idle'); }
+    else if(avatar.userData.legL){
+      avatar.userData.legL.rotation.x*=0.85;
+      avatar.userData.legR.rotation.x*=0.85;
+      avatar.position.y*=0.85;
+    }
   }
+  if(animMixer)animMixer.update(dt);
   ringMesh.position.x=avatar.position.x; ringMesh.position.z=avatar.position.z;
 }
 
