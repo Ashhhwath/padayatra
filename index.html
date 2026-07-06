@@ -599,37 +599,42 @@ function updateMovement(dt,now){
   if(keys['a']||keys['arrowleft'])jx=-1;
   if(keys['d']||keys['arrowright'])jx=1;
   const jm=Math.hypot(jx,jy);
-  if(jm>0.12){
+  const stickActive=jm>0.12;
+  if(stickActive){
     const speed=4.5; // m/s brisk walk
-    const ang=Math.atan2(jx,-jy)+cam.yaw+Math.PI; // camera-relative
-    const vx=Math.sin(ang)*speed*(jm>1?1:jm), vz=Math.cos(ang)*speed*(jm>1?1:jm);
-    move.target.x+=vx*dt; move.target.z+=vz*dt;
-    moveHeading=Math.atan2(vx,vz); moving=true;
+    const ang=Math.atan2(-jx,-jy)+cam.yaw+Math.PI; // camera-relative: up=away from camera, right=screen right
+    const mag=speed*(jm>1?1:jm);
+    // direct control: move the avatar itself, no glide lag
+    avatar.position.x+=Math.sin(ang)*mag*dt;
+    avatar.position.z+=Math.cos(ang)*mag*dt;
+    move.target.set(avatar.position.x,0,avatar.position.z); // keep GPS target in sync so nothing drifts after release
+    moveHeading=ang; moving=true;
+  } else {
+    // glide the avatar toward the GPS target (GO-style drift, GPS fixes only)
+    const dx=move.target.x-avatar.position.x, dz=move.target.z-avatar.position.z;
+    const d=Math.hypot(dx,dz);
+    if(d>0.08){
+      const step=Math.min(d, Math.max(d*6*dt, 1.2*dt));
+      avatar.position.x+=dx/d*step; avatar.position.z+=dz/d*step;
+      moveHeading=Math.atan2(dx,dz);
+      moving=true;
+    }
+    // teleport snap if GPS jumped very far (drove / bad fix)
+    if(d>120){ avatar.position.x=move.target.x; avatar.position.z=move.target.z; }
   }
-
-  // glide the avatar toward the GPS/joystick target (GO-style drift)
-  const dx=move.target.x-avatar.position.x, dz=move.target.z-avatar.position.z;
-  const d=Math.hypot(dx,dz);
-  if(d>0.08){
-    const step=Math.min(d, Math.max(d*3*dt, 1.2*dt));
-    avatar.position.x+=dx/d*step; avatar.position.z+=dz/d*step;
-    if(!moving) moveHeading=Math.atan2(dx,dz);
-    moving=true;
-  }
-  // teleport snap if GPS jumped very far (drove / bad fix)
-  if(d>120){ avatar.position.x=move.target.x; avatar.position.z=move.target.z; }
 
   // face heading + walk cycle
   if(moving){
     let a=moveHeading-avatar.rotation.y;
     while(a>Math.PI)a-=TAU; while(a<-Math.PI)a+=TAU;
-    avatar.rotation.y+=a*Math.min(1,10*dt);
+    avatar.rotation.y+=a*Math.min(1,16*dt);
     walkPhase+=dt*9;
     avatar.userData.legL.rotation.x=Math.sin(walkPhase)*0.7;
     avatar.userData.legR.rotation.x=-Math.sin(walkPhase)*0.7;
     avatar.position.y=Math.abs(Math.sin(walkPhase))*0.05;
-    // auto-rotate camera behind walking direction (GO behaviour)
-    if(cam.autoFollow && now-cam.lastManual>4000){
+    // auto-rotate camera behind walking direction (GPS walks only —
+    // rotating mid-steer would warp the stick's frame of reference)
+    if(cam.autoFollow && !stickActive && now-cam.lastManual>4000){
       let ca=moveHeading+Math.PI-cam.yaw;
       while(ca>Math.PI)ca-=TAU; while(ca<-Math.PI)ca+=TAU;
       cam.yaw+=ca*Math.min(1,1.6*dt);
