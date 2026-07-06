@@ -17,17 +17,6 @@
   #encCv{position:fixed;inset:0;z-index:15;display:none;touch-action:none;}
 
   .hud{position:fixed;pointer-events:none;z-index:10;}
-  #playerCard{top:calc(10px + env(safe-area-inset-top));left:10px;display:flex;gap:10px;align-items:center;
-    background:var(--panel);border:3px solid var(--ink);border-radius:16px;
-    padding:8px 14px 8px 8px;box-shadow:var(--shadow);pointer-events:auto;}
-  #avatarIcon{width:44px;height:44px;border-radius:12px;background:var(--accent-2);
-    border:3px solid var(--ink);display:flex;align-items:center;justify-content:center;
-    font-weight:bold;color:#fff;font-size:18px;}
-  #playerMeta b{font-size:14px;display:block;}
-  .xpbar{height:8px;background:var(--panel-2);border:2px solid var(--ink);border-radius:6px;overflow:hidden;margin-top:4px;min-width:110px;}
-  .xpbar i{display:block;height:100%;background:var(--gold);width:0%;transition:width .4s;}
-  #dust{font-size:11px;opacity:.75;margin-top:3px;display:block;}
-
   #gpsPill{top:calc(12px + env(safe-area-inset-top));right:12px;pointer-events:auto;
     background:var(--panel);border:3px solid var(--ink);border-radius:999px;
     padding:8px 14px;font-size:12px;font-weight:bold;box-shadow:var(--shadow);cursor:pointer;
@@ -41,7 +30,6 @@
     background:rgba(18,48,58,.82);color:#fdf8ee;border-radius:12px;padding:8px 12px;
     font-size:10px;line-height:1.5;display:none;pointer-events:auto;white-space:pre-line;}
 
-  #btnCol{bottom:calc(16px + env(safe-area-inset-bottom));right:12px;display:flex;flex-direction:column;gap:10px;pointer-events:auto;}
   .fab{width:56px;height:56px;border-radius:16px;background:var(--panel);
     border:3px solid var(--ink);box-shadow:var(--shadow);
     display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .08s;
@@ -49,13 +37,6 @@
   .fab:active{transform:translateY(3px);box-shadow:0 3px 0 rgba(18,48,58,.18);}
   .fab em{font-style:normal;font-size:20px;line-height:1;margin-bottom:8px;}
   .fab span{font-size:9px;font-weight:bold;position:absolute;bottom:4px;letter-spacing:.5px;}
-
-  #nearby{bottom:calc(16px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
-    background:rgba(253,248,238,.92);border:3px solid var(--ink);border-radius:16px;
-    padding:6px 10px;display:flex;gap:8px;align-items:center;box-shadow:var(--shadow);pointer-events:auto;}
-  #nearby .slot{width:42px;text-align:center;font-size:9px;font-weight:bold;}
-  #nearby canvas{width:36px;height:36px;margin:0 auto;display:block;}
-  #nearby .none{font-size:11px;opacity:.6;padding:8px 4px;}
 
   #joy{position:fixed;bottom:calc(22px + env(safe-area-inset-bottom));left:22px;width:118px;height:118px;border-radius:50%;
     background:rgba(253,248,238,.28);border:3px solid rgba(253,248,238,.5);z-index:11;touch-action:none;}
@@ -66,28 +47,6 @@
     background:var(--ink);color:#fff;font-size:13px;font-weight:bold;padding:9px 18px;
     border-radius:999px;opacity:0;transition:all .25s;z-index:60;pointer-events:none;max-width:86vw;text-align:center;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-
-  .modal{position:fixed;inset:0;background:rgba(11,31,38,.72);z-index:50;display:none;align-items:flex-end;justify-content:center;}
-  .modal.open{display:flex;}
-  .sheet{background:var(--panel);border:3px solid var(--ink);border-bottom:none;
-    border-radius:22px 22px 0 0;width:min(560px,100%);max-height:78vh;overflow-y:auto;
-    padding:18px 18px 26px;animation:up .22s ease-out;}
-  @keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
-  .sheet h2{font-size:18px;letter-spacing:.5px;margin-bottom:2px;}
-  .sheet .sub{font-size:12px;opacity:.65;margin-bottom:14px;}
-  .closeX{float:right;width:32px;height:32px;border-radius:10px;border:3px solid var(--ink);
-    background:var(--panel-2);font-weight:bold;cursor:pointer;font-size:14px;}
-  .dexgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;}
-  .dexcell{background:var(--panel-2);border:3px solid var(--ink);border-radius:14px;padding:8px 6px;text-align:center;}
-  .dexcell canvas{width:56px;height:56px;}
-  .dexcell b{display:block;font-size:11px;}
-  .dexcell small{font-size:9px;opacity:.65;}
-  .bagrow{display:flex;align-items:center;gap:12px;background:var(--panel-2);
-    border:3px solid var(--ink);border-radius:14px;padding:10px 14px;margin-bottom:10px;}
-  .balldot{width:34px;height:34px;border-radius:50%;border:3px solid var(--ink);position:relative;flex:none;}
-  .balldot::after{content:"";position:absolute;left:-3px;right:-3px;top:50%;height:3px;background:var(--ink);}
-  .bagrow b{flex:1;font-size:14px;}
-  .bagrow span{font-size:16px;font-weight:bold;}
 
   #encUI{position:fixed;inset:0;z-index:20;display:none;pointer-events:none;}
   #encUI.on{display:block;}
@@ -104,24 +63,9 @@
 <canvas id="gl"></canvas>
 <canvas id="encCv"></canvas>
 
-<div class="hud" id="playerCard">
-  <div id="avatarIcon">A</div>
-  <div id="playerMeta">
-    <b id="lvlTxt">Trainer · Lv 1</b>
-    <div class="xpbar"><i id="xpFill"></i></div>
-    <span id="dust">✦ 0 dust</span>
-  </div>
-</div>
-
 <div class="hud" id="gpsPill"><div id="gpsDot"></div><span id="gpsTxt">GPS: tap to start</span></div>
 <div class="hud" id="gpsDiag"></div>
 
-<div class="hud" id="btnCol">
-  <div class="fab" id="openBag"><em>🎒</em><span>BAG</span></div>
-  <div class="fab" id="openDex"><em>📖</em><span>CODEX</span></div>
-</div>
-
-<div class="hud" id="nearby"></div>
 <div id="joy"><div id="knob"></div></div>
 <div id="toast"></div>
 
@@ -132,18 +76,6 @@
   <div id="encHint">Flick the ball up to throw — time the ring!</div>
 </div>
 
-<div class="modal" id="bagModal"><div class="sheet">
-  <button class="closeX" data-close="bagModal">✕</button>
-  <h2>Bag</h2><div class="sub">Spin waystones (blue pillars) to restock.</div>
-  <div id="bagRows"></div>
-</div></div>
-
-<div class="modal" id="dexModal"><div class="sheet">
-  <button class="closeX" data-close="dexModal">✕</button>
-  <h2>Creature Codex</h2><div class="sub" id="dexCount">0 / 10 registered</div>
-  <div class="dexgrid" id="dexGrid"></div>
-</div></div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 "use strict";
@@ -152,7 +84,7 @@
    - three.js TPP camera (drag to orbit, pinch/wheel to zoom)
    - Geolocation watchPosition drives the avatar (1 unit = 1 m)
    - Joystick/WASD fallback when GPS is off or denied
-   - Chunked procedural terrain, billboard creatures, waystones
+   - Chunked procedural terrain, billboard creatures
    - Encounter/catch system on a 2D overlay canvas
 ============================================================ */
 
@@ -255,7 +187,7 @@ const game = {
   screen:'map', xp:0, level:1, dust:0,
   balls:{normal:20, great:5, ultra:2},
   ballOrder:['normal','great','ultra'], selBall:'normal',
-  caught:{}, seen:{}, spawns:[], stones:[], toastTimer:null,
+  caught:{}, seen:{}, spawns:[], toastTimer:null,
 };
 const BALLS = {
   normal:{name:'Field Ball', mult:1.0, color:'#ff6b5e'},
@@ -264,7 +196,6 @@ const BALLS = {
 };
 const xpNeed = lv => 800 + (lv-1)*450;
 const INTERACT_RANGE = 60;   // metres, like GO's encounter reach
-const STONE_RANGE = 40;      // metres, GO stop spin radius
 
 function toast(msg,ms){
   const t=document.getElementById('toast');
@@ -281,11 +212,7 @@ function grantXP(n){
   }
   refreshHUD();
 }
-function refreshHUD(){
-  document.getElementById('lvlTxt').textContent=`Trainer · Lv ${game.level}`;
-  document.getElementById('xpFill').style.width=(game.xp/xpNeed(game.level)*100)+'%';
-  document.getElementById('dust').textContent=`✦ ${game.dust} dust`;
-}
+function refreshHUD(){} // trainer card removed from UI; XP/level still tracked internally
 
 /* ---------------- three.js scene ---------------- */
 const glCv = document.getElementById('gl');
@@ -718,49 +645,6 @@ glCv.addEventListener('pointerup',dragEnd);
 glCv.addEventListener('pointercancel',dragEnd);
 glCv.addEventListener('wheel',e=>{ cam.dist=clamp(cam.dist+e.deltaY*0.02,8,32); },{passive:true});
 
-/* ---------------- waystones (3D) ---------------- */
-const stoneGeoP=new THREE.CylinderGeometry(0.5,0.8,3.4,8);
-const stoneGeoCube=new THREE.IcosahedronGeometry(0.7,0);
-function stoneKey(gx,gy){return gx+','+gy;}
-function ensureStones(){
-  const cell=160; // one stone per 160 m cell
-  const cx=Math.floor(avatar.position.x/cell), cz=Math.floor(avatar.position.z/cell);
-  for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++){
-    const gx=cx+dx, gz=cz+dz, key=stoneKey(gx,gz);
-    if(game.stones.find(s=>s.key===key)) continue;
-    const rx=hash2(gx*7.3,gz*3.1), rz=hash2(gx*2.9,gz*8.7);
-    const sx=gx*cell+rx*cell*0.7+cell*0.15;
-    const sz=gz*cell+rz*cell*0.7+cell*0.15;
-    const matP=new THREE.MeshLambertMaterial({color:0x4f9de8});
-    const matC=new THREE.MeshLambertMaterial({color:0xbfe0ff, emissive:0x224466});
-    const pillar=new THREE.Mesh(stoneGeoP, matP); pillar.position.y=1.7;
-    const cube=new THREE.Mesh(stoneGeoCube, matC); cube.position.y=4.1;
-    const grp=new THREE.Group(); grp.add(pillar); grp.add(cube); grp.add(makeShadow(3));
-    grp.position.set(sx,0,sz);
-    scene.add(grp);
-    game.stones.push({key,x:sx,z:sz,cooldownUntil:0,grp,cube,matP,matC});
-  }
-  game.stones=game.stones.filter(s=>{
-    if(dist2(s.x,s.z,avatar.position.x,avatar.position.z)>cell*4){ scene.remove(s.grp); return false; }
-    return true;
-  });
-}
-function spinStone(s){
-  const now=performance.now();
-  if(now<s.cooldownUntil){ toast(`Waystone recharging… ${Math.ceil((s.cooldownUntil-now)/1000)}s`); return; }
-  s.cooldownUntil=now+60000;
-  const n=3+Math.floor(Math.random()*3);
-  let got={normal:0,great:0,ultra:0};
-  for(let i=0;i<n;i++){ const r=Math.random(); if(r<0.72)got.normal++;else if(r<0.94)got.great++;else got.ultra++; }
-  game.balls.normal+=got.normal; game.balls.great+=got.great; game.balls.ultra+=got.ultra;
-  grantXP(50);
-  const parts=[];
-  if(got.normal)parts.push(`${got.normal} Field`);
-  if(got.great)parts.push(`${got.great} Grand`);
-  if(got.ultra)parts.push(`${got.ultra} Astral`);
-  toast(`Waystone spun! +${parts.join(', ')} · +50 XP`);
-}
-
 /* ---------------- spawns (3D billboards) ---------------- */
 const MAX_SPAWNS=10;
 let lastSpawnAt=0;
@@ -824,16 +708,6 @@ function tap3D(px,py){
     else toast(`${s.sp.name} is too far — walk closer!`);
     return;
   }
-  // waystones
-  const sHits=raycaster.intersectObjects(game.stones.flatMap(s=>[s.grp.children[0],s.cube]));
-  if(sHits.length){
-    let obj=sHits[0].object;
-    const st=game.stones.find(s=>s.grp.children.includes(obj)||s.cube===obj);
-    if(st){
-      if(dist2(st.x,st.z,avatar.position.x,avatar.position.z)<=STONE_RANGE) spinStone(st);
-      else toast('Walk closer to the waystone to spin it.');
-    }
-  }
 }
 
 /* ================= ENCOUNTER (2D overlay, GO catch screen) ================= */
@@ -859,7 +733,6 @@ function startEncounter(spawn){
   enc.msg=''; enc.attackT=0;
   encUI.classList.add('on'); encCv.style.display='block';
   document.getElementById('joy').style.display='none';
-  document.getElementById('nearby').style.display='none';
   encTop.textContent=`Wild ${spawn.sp.name} · CP ${spawn.cp}`;
   updateBallBtn();
 }
@@ -867,7 +740,6 @@ function endEncounter(removeSpawn){
   enc.active=false; game.screen='map';
   encUI.classList.remove('on'); encCv.style.display='none';
   document.getElementById('joy').style.display='block';
-  document.getElementById('nearby').style.display='flex';
   if(removeSpawn && enc.spawn){
     scene.remove(enc.spawn.grp);
     const i=game.spawns.indexOf(enc.spawn);
@@ -919,7 +791,9 @@ encCv.addEventListener('pointerup',()=>{
 });
 function throwBall(vx,vy){
   if(game.balls[game.selBall]<=0){
-    toast(`Out of ${BALLS[game.selBall].name}s! Switch ball or spin a waystone.`); return;
+    game.balls[game.selBall]+=12; // waystones removed — restock automatically
+    toast(`${BALLS[game.selBall].name}s restocked +12`);
+    updateBallBtn();
   }
   game.balls[game.selBall]--; updateBallBtn();
   const power=clamp(-vy,0.25,2.4), reach=power/2.0;
@@ -1054,77 +928,6 @@ function drawEncounter(now,dt){
   }
 }
 
-/* ---------------- nearby tracker ---------------- */
-const nearbyEl=document.getElementById('nearby');
-let nearbyStamp=0;
-function refreshNearby(now){
-  if(now-nearbyStamp<900)return; nearbyStamp=now;
-  const list=[...game.spawns]
-    .map(s=>({s,d:dist2(s.x,s.z,avatar.position.x,avatar.position.z)}))
-    .sort((a,b)=>a.d-b.d).slice(0,4);
-  nearbyEl.innerHTML='';
-  if(!list.length){nearbyEl.innerHTML='<div class="none">Scanning for creatures…</div>';return;}
-  for(const {s,d} of list){
-    const div=document.createElement('div'); div.className='slot';
-    const c=document.createElement('canvas'); c.width=72;c.height=72;
-    const g=c.getContext('2d'); g.translate(36,58);
-    drawCreature(g,s.sp,40,0,0);
-    div.appendChild(c);
-    const lbl=document.createElement('div'); lbl.textContent=Math.round(d)+'m';
-    div.appendChild(lbl);
-    nearbyEl.appendChild(div);
-  }
-}
-
-/* ---------------- modals ---------------- */
-function openModal(id){document.getElementById(id).classList.add('open');}
-document.querySelectorAll('.closeX').forEach(b=>b.addEventListener('click',()=>{
-  document.getElementById(b.dataset.close).classList.remove('open');}));
-document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{
-  if(e.target===m)m.classList.remove('open');}));
-document.getElementById('openBag').addEventListener('click',()=>{renderBag();openModal('bagModal');});
-document.getElementById('openDex').addEventListener('click',()=>{renderDex();openModal('dexModal');});
-function renderBag(){
-  const el=document.getElementById('bagRows'); el.innerHTML='';
-  for(const key of game.ballOrder){
-    const b=BALLS[key];
-    const row=document.createElement('div'); row.className='bagrow';
-    row.innerHTML=`<div class="balldot" style="background:linear-gradient(${b.color} 50%, #fdf8ee 50%)"></div>
-      <b>${b.name}<br><small style="font-weight:normal;opacity:.65">${b.mult}× catch multiplier</small></b>
-      <span>×${game.balls[key]}</span>`;
-    el.appendChild(row);
-  }
-  const dr=document.createElement('div'); dr.className='bagrow';
-  dr.innerHTML=`<div class="balldot" style="background:#f5b93c;border-radius:8px"></div>
-    <b>Stardust<br><small style="font-weight:normal;opacity:.65">Earned per catch — future upgrade currency</small></b>
-    <span>✦${game.dust}</span>`;
-  el.appendChild(dr);
-}
-function renderDex(){
-  const grid=document.getElementById('dexGrid'); grid.innerHTML='';
-  let n=0;
-  for(const sp of SPECIES){
-    const caught=game.caught[sp.id]||0, seen=game.seen[sp.id]||0;
-    if(caught)n++;
-    const cell=document.createElement('div'); cell.className='dexcell';
-    const c=document.createElement('canvas'); c.width=112;c.height=112;
-    const g=c.getContext('2d'); g.translate(56,92);
-    if(caught){drawCreature(g,sp,64,0,0);}
-    else{
-      g.globalAlpha=seen?0.9:0.5;
-      drawCreature(g,{...sp,color:'#7c93a0',accent:'#66808e'},64,0,0);
-      g.globalAlpha=1;
-    }
-    cell.appendChild(c);
-    const b=document.createElement('b'); b.textContent=caught?sp.name:'???';
-    const s=document.createElement('small');
-    s.textContent=caught?`${sp.type} · caught ×${caught}`:(seen?'Seen nearby':'Not discovered');
-    cell.appendChild(b); cell.appendChild(s);
-    grid.appendChild(cell);
-  }
-  document.getElementById('dexCount').textContent=`${n} / ${SPECIES.length} registered`;
-}
-
 /* ---------------- main loop ---------------- */
 let last=performance.now();
 function frame(now){
@@ -1132,20 +935,10 @@ function frame(now){
   if(game.screen==='map'){
     updateMovement(dt,now);
     updateChunks();
-    ensureStones();
     trySpawn(now);
     updateSpawns(now,dt);
-    // stone visuals
-    for(const s of game.stones){
-      const ready=now>=s.cooldownUntil;
-      s.matP.color.setHex(ready?0x4f9de8:0x9aa8b5);
-      s.matC.emissive.setHex(ready?0x224466:0x111111);
-      s.cube.rotation.y+=dt*(ready?1.4:0.2);
-      s.cube.position.y=4.1+Math.sin(now/500)*0.15;
-    }
     applyCamera(dt);
     renderer.render(scene,camera);
-    refreshNearby(now);
   } else {
     ectx.clearRect(0,0,EW,EH);
     drawEncounter(now,dt);
