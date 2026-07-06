@@ -487,6 +487,7 @@ function renderDiag(){
     `accuracy: ${gpsStats.lastAcc==null?'—':'±'+Math.round(gpsStats.lastAcc)+'m'}`,
     `distance walked: ${Math.round(gpsStats.movedM)}m`,
     `last fix: ${gpsStats.lastAt?Math.round((performance.now()-gpsStats.lastAt)/1000)+'s ago':'—'}`,
+    `watch restarts: ${gpsStats.restarts||0}`,
   ];
   gpsDiag.style.display='block';
   gpsDiag.textContent=(issues.length?issues.join('\n')+'\n':'')+lines.join('\n');
@@ -498,9 +499,57 @@ async function keepAwake(){
   try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); } }catch(e){}
 }
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible' && move.gpsOn) keepAwake();
+  if(document.visibilityState!=='visible') return;
+  if(move.watchId!=null) beginWatch(); // stalled-watch recovery after screen-lock/app-switch
+  if(move.gpsOn) keepAwake();
 });
 
+let impreciseWarned=false;
+function onGpsFix(fix){
+  const {latitude:lat, longitude:lng, accuracy} = fix.coords;
+  gpsStats.fixes++; gpsStats.lastAcc=accuracy; gpsStats.lastAt=performance.now();
+  if(!move.origin){
+    move.origin={lat,lng};
+    keepAwake();
+    toast(`GPS locked (±${Math.round(accuracy)}m). Walk in the real world to move!`, 3200);
+  }
+  if(accuracy>150){
+    setGpsUI('wait',`GPS: imprecise ±${Math.round(accuracy)}m`);
+    if(!impreciseWarned){
+      impreciseWarned=true;
+      toast('Location is very imprecise — walking won\'t register. Enable Precise Location for your browser (Settings → Privacy → Location Services) and move outdoors.', 5600);
+    }
+  } else if(accuracy>80){ setGpsUI('wait',`GPS: weak ±${Math.round(accuracy)}m`); }
+  else { setGpsUI('live',`GPS: live ±${Math.round(accuracy)}m`); }
+  const p=latLngToLocal(lat,lng);
+  // bearing + walked distance from previous fix
+  if(move.lastFix){
+    const dx=p.x-move.lastFix.x, dz=p.z-move.lastFix.z, d=Math.hypot(dx,dz);
+    gpsStats.movedM+=d;
+    if(d>1.2){ move.heading=Math.atan2(dx,dz); move.speedEst=d; }
+  }
+  move.lastFix=p;
+  move.target.set(p.x,0,p.z);
+  move.gpsOn=true;
+  renderDiag();
+}
+function onGpsErr(err){
+  move.gpsOn=false;
+  gpsStats.permState = err.code===1 ? 'denied' : gpsStats.permState;
+  setGpsUI('err', err.code===1?'GPS: denied':err.code===3?'GPS: timeout':'GPS: unavailable');
+  toast(err.code===1
+    ? 'Location denied. Allow it in browser/site settings, enable Precise Location, then tap the pill again.'
+    : err.code===3
+    ? 'GPS timed out — move outdoors / near a window and tap the pill to retry.'
+    : 'Position unavailable — check that Location Services are on for this browser.', 4600);
+  renderDiag();
+}
+// (re)register the position watch; keeps move.origin so the world doesn't re-anchor
+function beginWatch(){
+  if(move.watchId!=null) navigator.geolocation.clearWatch(move.watchId);
+  move.watchId = navigator.geolocation.watchPosition(onGpsFix, onGpsErr,
+    {enableHighAccuracy:true, maximumAge:1000, timeout:20000});
+}
 async function startGPS(){
   const issues=envIssues();
   if('permissions' in navigator && navigator.permissions.query){
@@ -517,39 +566,18 @@ async function startGPS(){
   } else {
     setGpsUI('wait','GPS: locating…');
   }
-  move.watchId = navigator.geolocation.watchPosition(fix => {
-    const {latitude:lat, longitude:lng, accuracy} = fix.coords;
-    gpsStats.fixes++; gpsStats.lastAcc=accuracy; gpsStats.lastAt=performance.now();
-    if(!move.origin){
-      move.origin={lat,lng};
-      keepAwake();
-      toast(`GPS locked (±${Math.round(accuracy)}m). Walk in the real world to move!`, 3200);
-    }
-    if(accuracy>80){ setGpsUI('wait',`GPS: weak ±${Math.round(accuracy)}m`); }
-    else { setGpsUI('live',`GPS: live ±${Math.round(accuracy)}m`); }
-    const p=latLngToLocal(lat,lng);
-    // bearing + walked distance from previous fix
-    if(move.lastFix){
-      const dx=p.x-move.lastFix.x, dz=p.z-move.lastFix.z, d=Math.hypot(dx,dz);
-      gpsStats.movedM+=d;
-      if(d>1.2){ move.heading=Math.atan2(dx,dz); move.speedEst=d; }
-    }
-    move.lastFix=p;
-    move.target.set(p.x,0,p.z);
-    move.gpsOn=true;
-    renderDiag();
-  }, err => {
-    move.gpsOn=false;
-    gpsStats.permState = err.code===1 ? 'denied' : gpsStats.permState;
-    setGpsUI('err', err.code===1?'GPS: denied':err.code===3?'GPS: timeout':'GPS: unavailable');
-    toast(err.code===1
-      ? 'Location denied. Allow it in browser/site settings, enable Precise Location, then tap the pill again.'
-      : err.code===3
-      ? 'GPS timed out — move outdoors / near a window and tap the pill to retry.'
-      : 'Position unavailable — check that Location Services are on for this browser.', 4600);
-    renderDiag();
-  }, {enableHighAccuracy:true, maximumAge:1000, timeout:20000});
+  beginWatch();
 }
+// Phones silently stall a geolocation watch after screen-lock/backgrounding —
+// no error fires, fixes just stop. Watchdog: no fix for 15s while visible → re-register.
+setInterval(()=>{
+  if(move.watchId==null || document.visibilityState!=='visible') return;
+  if(gpsStats.lastAt && performance.now()-gpsStats.lastAt>15000){
+    gpsStats.restarts=(gpsStats.restarts||0)+1;
+    setGpsUI('wait','GPS: reconnecting…');
+    beginWatch();
+  }
+}, 5000);
 function stopGPS(){
   if(move.watchId!=null) navigator.geolocation.clearWatch(move.watchId);
   move.watchId=null; move.gpsOn=false; move.origin=null; move.lastFix=null;
@@ -558,7 +586,9 @@ function stopGPS(){
   setGpsUI('','GPS: tap to start');
 }
 document.getElementById('gpsPill').addEventListener('click', ()=>{
-  if(move.watchId!=null){ stopGPS(); toast('GPS off — joystick mode.'); }
+  // only treat as "on" when fixes are actually flowing; a denied/timed-out
+  // watch keeps its id, and tapping should RETRY, not toggle off dead GPS
+  if(move.watchId!=null && move.gpsOn){ stopGPS(); toast('GPS off — joystick mode.'); }
   else startGPS(); // user gesture → reliable permission prompt on iOS
 });
 // Auto-attempt only when the environment can actually grant it;
